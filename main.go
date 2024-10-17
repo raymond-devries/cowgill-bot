@@ -1,25 +1,79 @@
 package main
 
 import (
-	"fmt"
+	"encoding/json"
+	"io"
+	"log"
+	"net/http"
+	"time"
 )
 
-//TIP To run your code, right-click the code and select <b>Run</b>. Alternatively, click
-// the <icon src="AllIcons.Actions.Execute"/> icon in the gutter and select the <b>Run</b> menu item from here.
-
-func main() {
-	//TIP Press <shortcut actionId="ShowIntentionActions"/> when your caret is at the underlined or highlighted text
-	// to see how GoLand suggests fixing it.
-	s := "gopher"
-	fmt.Println("Hello and welcome, %s!", s)
-
-	for i := 1; i <= 5; i++ {
-		//TIP You can try debugging your code. We have set one <icon src="AllIcons.Debugger.Db_set_breakpoint"/> breakpoint
-		// for you, but you can always add more by pressing <shortcut actionId="ToggleLineBreakpoint"/>. To start your debugging session,
-		// right-click your code in the editor and select the <b>Debug</b> option.
-		fmt.Println("i =", 100/i)
-	}
+type MapUrls struct {
+	LightUrl string `json:"light_url"`
+	DarkUrl  string `json:"dark_url"`
 }
 
-//TIP See GoLand help at <a href="https://www.jetbrains.com/help/go/">jetbrains.com/help/go/</a>.
-// Also, you can try interactive lessons for GoLand by selecting 'Help | Learn IDE Features' from the main menu.
+type Route struct {
+	MapUrls MapUrls `json:"map_urls"`
+}
+
+type Event struct {
+	Address             string      `json:"address"`
+	Description         string      `json:"description"`
+	Id                  int         `json:"id"`
+	Route               Route       `json:"route"`
+	Title               string      `json:"title"`
+	UpcomingOccurrences []time.Time `json:"upcoming_occurrences"`
+	WomenOnly           bool        `json:"women_only"`
+}
+
+func timesAfterNow(times []time.Time) bool {
+	now := time.Now()
+	for _, t := range times {
+		if t.After(now) {
+			return true
+		}
+	}
+	return false
+}
+
+func main() {
+	req, err := http.NewRequest("GET", "https://www.strava.com/api/v3/clubs/470714/group_events", nil)
+	if err != nil {
+		log.Fatalln("Error creating request")
+	}
+	req.Header.Set("Authorization", "Bearer")
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Fatalln("Error sending request")
+	}
+	if resp.StatusCode != 200 {
+		log.Fatalf("Invalid status code: %d", resp.StatusCode)
+	}
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			log.Fatalln("Error closing body")
+		}
+	}(resp.Body)
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatalln("Error reading response body")
+	}
+
+	var events []Event
+	err = json.Unmarshal(body, &events)
+	if err != nil {
+		log.Fatalf("Error parsing JSON: %v", err)
+	}
+
+	var upcomingEvents []Event
+	for _, event := range events {
+		if timesAfterNow(event.UpcomingOccurrences) {
+			upcomingEvents = append(upcomingEvents, event)
+		}
+	}
+	log.Println("Successfully retrieved upcoming Cowgill events")
+}
