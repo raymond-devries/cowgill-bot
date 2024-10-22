@@ -2,9 +2,12 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 )
 
@@ -15,6 +18,13 @@ type MapUrls struct {
 
 type Route struct {
 	MapUrls MapUrls `json:"map_urls"`
+}
+
+type Auth struct {
+	TokenType    string `json:"token_type"`
+	AccessToken  string `json:"access_token"`
+	ExpiresAt    int    `json:"expires_at"`
+	RefreshToken string `json:"refresh_token"`
 }
 
 type Event struct {
@@ -37,12 +47,47 @@ func timesAfterNow(times []time.Time) bool {
 	return false
 }
 
-func main() {
+func getAccessToken() Auth {
+	client := &http.Client{}
+	clientId := "137765"
+	clientSecret := os.Getenv("STRAVA_CLIENT_SECRET")
+	refreshToken := os.Getenv("STRAVA_REFRESH_TOKEN")
+	formData := fmt.Sprintf("client_id=%s&client_secret=%s&grant_type=refresh_token&refresh_token=%s", clientId, clientSecret, refreshToken)
+	data := strings.NewReader(formData)
+	req, err := http.NewRequest("POST", "https://www.strava.com/api/v3/oauth/token", data)
+	if err != nil {
+		log.Fatalln("Error creating request")
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Fatalln("Error refreshing token")
+	}
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			log.Fatalln("Error closing body")
+		}
+	}(resp.Body)
+	bodyText, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatalln("Error reading response body")
+	}
+	var auth Auth
+	err = json.Unmarshal(bodyText, &auth)
+	if err != nil {
+		log.Fatalln("Error parsing auth data")
+	}
+	return auth
+}
+
+func getUpcomingStravaEvents() {
+	auth := getAccessToken()
 	req, err := http.NewRequest("GET", "https://www.strava.com/api/v3/clubs/470714/group_events", nil)
 	if err != nil {
 		log.Fatalln("Error creating request")
 	}
-	req.Header.Set("Authorization", "Bearer")
+	req.Header.Set("Authorization", "Bearer "+auth.AccessToken)
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -76,4 +121,8 @@ func main() {
 		}
 	}
 	log.Println("Successfully retrieved upcoming Cowgill events")
+}
+
+func main() {
+
 }
