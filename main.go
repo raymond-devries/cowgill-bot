@@ -1,26 +1,18 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"github.com/jefflinse/githubsecret"
-	"io"
 	"log"
-	"net/http"
 	"os"
-	"strings"
 	"time"
+
+	"github.com/go-resty/resty/v2"
+	"github.com/jefflinse/githubsecret"
 )
 
 type GithubPublicKey struct {
 	KeyID string `json:"key_id"`
 	Key   string `json:"key"`
-}
-
-type GithubSecret struct {
-	EncryptedValue string `json:"encrypted_value"`
-	KeyID          string `json:"key_id"`
 }
 
 type MapUrls struct {
@@ -49,14 +41,6 @@ type Event struct {
 	WomenOnly           bool        `json:"women_only"`
 }
 
-func serializeJson[T any](value T) io.Reader {
-	serializedValue, err := json.Marshal(value)
-	if err != nil {
-		log.Fatalln("Error serializing value")
-	}
-	return bytes.NewBuffer(serializedValue)
-}
-
 func timesAfterNow(times []time.Time) bool {
 	now := time.Now()
 	for _, t := range times {
@@ -68,69 +52,36 @@ func timesAfterNow(times []time.Time) bool {
 }
 
 func getStravaAuth() Auth {
-	client := &http.Client{}
-	clientId := "137765"
-	clientSecret := os.Getenv("STRAVA_CLIENT_SECRET")
-	refreshToken := os.Getenv("STRAVA_REFRESH_TOKEN")
-	formData := fmt.Sprintf("client_id=%s&client_secret=%s&grant_type=refresh_token&refresh_token=%s", clientId, clientSecret, refreshToken)
-	data := strings.NewReader(formData)
-	req, err := http.NewRequest("POST", "https://www.strava.com/api/v3/oauth/token", data)
+	client := resty.New()
+
+	auth := Auth{}
+	_, err := client.R().
+		SetBody(map[string]string{
+			"client_id":     "137765",
+			"client_secret": os.Getenv("STRAVA_CLIENT_SECRET"),
+			"grant_type":    "refresh_token",
+			"refresh_token": os.Getenv("STRAVA_REFRESH_TOKEN")}).
+		SetResult(&auth).
+		Post("https://www.strava.com/api/v3/oauth/token")
 	if err != nil {
-		log.Fatalln("Error creating request")
+		log.Fatalln("Failed to retrieve Strava credentials")
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Fatalln("Error refreshing token")
-	}
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-			log.Fatalln("Error closing body")
-		}
-	}(resp.Body)
-	bodyText, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Fatalln("Error reading response body")
-	}
-	var auth Auth
-	err = json.Unmarshal(bodyText, &auth)
-	if err != nil {
-		log.Fatalln("Error parsing auth data")
-	}
+
 	return auth
 }
 
 func getUpcomingStravaEvents(auth Auth) []Event {
-	req, err := http.NewRequest("GET", "https://www.strava.com/api/v3/clubs/470714/group_events", nil)
-	if err != nil {
-		log.Fatalln("Error creating request")
-	}
-	req.Header.Set("Authorization", "Bearer "+auth.AccessToken)
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Fatalln("Error sending request")
-	}
-	if resp.StatusCode != 200 {
-		log.Fatalf("Invalid status code: %d", resp.StatusCode)
-	}
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-			log.Fatalln("Error closing body")
-		}
-	}(resp.Body)
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Fatalln("Error reading response body")
-	}
-
 	var events []Event
-	err = json.Unmarshal(body, &events)
+
+	client := resty.New()
+
+	_, err := client.R().
+		SetResult(&events).
+		SetAuthToken(auth.AccessToken).
+		Get("https://www.strava.com/api/v3/clubs/470714/group_events")
+
 	if err != nil {
-		log.Fatalf("Error parsing JSON: %v", err)
+		log.Fatalln("Failed to retrieve Strava events")
 	}
 
 	var upcomingEvents []Event
@@ -139,45 +90,7 @@ func getUpcomingStravaEvents(auth Auth) []Event {
 			upcomingEvents = append(upcomingEvents, event)
 		}
 	}
-	log.Println("Successfully retrieved upcoming Cowgill events")
 	return upcomingEvents
-}
-
-func githubRequest[T any](url string, method string, body io.Reader) T {
-	githubToken := os.Getenv("GH_TOKEN")
-
-	req, err := http.NewRequest(method, "https://api.github.com/repos/raymond-devries/cowgill-bot"+url, body)
-	if err != nil {
-		log.Fatalf("Error creating github request for url %s", url)
-	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("Authorization", "Bearer "+githubToken)
-	req.Header.Set("X-Github-Api-Version", "2022-11-28")
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		log.Fatalf("Error making github request to %s", url)
-	}
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-			log.Fatalln("Error closing body")
-		}
-	}(resp.Body)
-	bodyText, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Fatalln("Error reading response body")
-	}
-
-	var response T
-	if string(bodyText) == "" {
-		return response
-	}
-	err = json.Unmarshal(bodyText, &response)
-	if err != nil {
-		log.Fatalln("Error parsing data")
-	}
-	return response
 }
 
 func updateStravaRefreshToken(refreshToken string) {
@@ -185,16 +98,33 @@ func updateStravaRefreshToken(refreshToken string) {
 		log.Println("Strava refresh token already up to date")
 		return
 	}
-	publicKey := githubRequest[GithubPublicKey]("/actions/secrets/public-key", "GET", nil)
+
+	client := resty.New()
+	client.SetBaseURL("https://api.github.com/repos/raymond-devries/cowgill-bot")
+	client.SetAuthToken(os.Getenv("GH_TOKEN"))
+	client.SetHeader("Accept", "application/vnd.github+json")
+	client.SetHeader("X-Github-Api-Version", "2022-11-28")
+
+	publicKey := GithubPublicKey{}
+	resp, err := client.R().
+		SetResult(&publicKey).
+		Get("/actions/secrets/public-key")
+	if (err != nil) || (resp.StatusCode() != 200) {
+		log.Fatalln("Failed to retrieve public key")
+	}
+
 	encryptedRefreshToken, err := githubsecret.Encrypt(publicKey.Key, refreshToken)
 	if err != nil {
 		log.Fatalln("Error encrypting secret")
 	}
-	githubStravaRefreshToken := GithubSecret{
-		EncryptedValue: encryptedRefreshToken,
-		KeyID:          publicKey.KeyID,
+
+	resp, err = client.R().
+		SetBody(map[string]string{"encrypted_value": encryptedRefreshToken, "key_id": publicKey.KeyID}).
+		Put("/actions/secrets/STRAVA_REFRESH_TOKEN")
+	if (err != nil) || (resp.StatusCode() != 204) {
+		log.Fatalln("Failed to update github secret")
 	}
-	githubRequest[struct{}]("/actions/secrets/STRAVA_REFRESH_TOKEN", "PUT", serializeJson[GithubSecret](githubStravaRefreshToken))
+
 	log.Println("Successfully updated strava refresh token")
 }
 
@@ -202,6 +132,5 @@ func main() {
 	stravaAuth := getStravaAuth()
 	updateStravaRefreshToken(stravaAuth.RefreshToken)
 	upcomingEvents := getUpcomingStravaEvents(stravaAuth)
-	// Print events for now
 	fmt.Println(upcomingEvents)
 }
