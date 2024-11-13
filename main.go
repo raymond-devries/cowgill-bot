@@ -198,5 +198,5 @@ func main() {
 	stravaAuth := getStravaAuth()
 	updateStravaRefreshToken(stravaAuth.RefreshToken)
 	upcomingEvents := getUpcomingStravaEvents(stravaAuth)
-	fmt.Println(upcomingEvents)
+	updateWebsiteUpcomingEvents(upcomingEvents)
 }
