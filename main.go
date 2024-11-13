@@ -1,7 +1,11 @@
 package main
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"log"
 	"os"
 	"time"
@@ -20,8 +24,14 @@ type MapUrls struct {
 	DarkUrl  string `json:"dark_url"`
 }
 
+type Map struct {
+	Id              string `json:"id"`
+	SummaryPolyline string `json:"summary_polyline"`
+}
+
 type Route struct {
 	MapUrls MapUrls `json:"map_urls"`
+	Map     Map     `json:"map"`
 }
 
 type Auth struct {
@@ -126,6 +136,62 @@ func updateStravaRefreshToken(refreshToken string) {
 	}
 
 	log.Println("Successfully updated strava refresh token")
+}
+
+func updateWebsiteUpcomingEvents(upcomingEvents []Event) {
+	client := resty.New()
+	client.SetBaseURL("https://api.github.com/repos/raymond-devries/cowgill")
+	client.SetAuthToken(os.Getenv("GH_TOKEN"))
+	client.SetHeader("Accept", "application/vnd.github+json")
+	client.SetHeader("X-Github-Api-Version", "2022-11-28")
+
+	currentFile := struct {
+		EncodedContent string `json:"content"`
+		Sha            string `json:"sha"`
+	}{}
+	resp, err := client.R().
+		SetResult(&currentFile).
+		Get("/contents/src/routes/events/upcoming_events.json")
+	if (err != nil) || (resp.StatusCode() != 200) {
+		log.Fatalln("Failed to retrieve upcoming_events.json from the website")
+	}
+	repoUpcomingEventsDecoded, err := base64.StdEncoding.DecodeString(currentFile.EncodedContent)
+	if err != nil {
+		log.Fatalln("Failed to decode upcoming_events.json from the website repo")
+	}
+
+	var repoUpcomingEvents []Event
+	err = json.Unmarshal(repoUpcomingEventsDecoded, &repoUpcomingEvents)
+	if err != nil {
+		log.Fatalln("Failed to marshall upcoming_events.json from the website repo")
+	}
+
+	ignoreFields := cmpopts.IgnoreFields(Event{}, "Route.MapUrls")
+	if cmp.Equal(upcomingEvents, repoUpcomingEvents, ignoreFields) {
+		log.Println("Website events are already up to date")
+		return
+	}
+
+	log.Println("Differences in upcoming events")
+	fmt.Println(cmp.Diff(upcomingEvents, repoUpcomingEvents))
+
+	newContents, err := json.MarshalIndent(upcomingEvents, "", "  ")
+	if err != nil {
+		log.Fatalln("Failed to serialize upcoming_events.json")
+	}
+	encodedNewContents := base64.StdEncoding.EncodeToString(newContents)
+
+	resp, err = client.R().
+		SetBody(map[string]string{
+			"content": encodedNewContents, "message": "Update upcoming events", "sha": currentFile.Sha,
+		}).
+		Put("/contents/src/routes/events/upcoming_events.json")
+	if (err != nil) || (resp.StatusCode() != 200) {
+		log.Fatalln("Failed to update upcoming_events.json on the website")
+	}
+
+	log.Println("Successfully updated website upcoming events")
+
 }
 
 func main() {
