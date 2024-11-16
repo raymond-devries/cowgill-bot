@@ -42,13 +42,11 @@ type Auth struct {
 }
 
 type Event struct {
-	Address             string      `json:"address"`
 	Description         string      `json:"description"`
 	Id                  int         `json:"id"`
 	Route               Route       `json:"route"`
 	Title               string      `json:"title"`
 	UpcomingOccurrences []time.Time `json:"upcoming_occurrences"`
-	WomenOnly           bool        `json:"women_only"`
 }
 
 func timesAfterNow(times []time.Time) bool {
