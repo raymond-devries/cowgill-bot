@@ -21,7 +21,7 @@ jobs:
     - name: Install dependencies
       run: go get .
     - name: Build and run
-      run: go run main.go
+      run: go run scrapeStravaEvents.go
       env:
         GH_TOKEN: ${{ secrets.GH_TOKEN }}
         STRAVA_CLIENT_SECRET: ${{ secrets.STRAVA_CLIENT_SECRET }}

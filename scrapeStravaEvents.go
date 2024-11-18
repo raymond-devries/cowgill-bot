@@ -83,12 +83,12 @@ func getUpcomingStravaEvents(auth Auth) []Event {
 
 	client := resty.New()
 
-	_, err := client.R().
+	resp, err := client.R().
 		SetResult(&events).
 		SetAuthToken(auth.AccessToken).
 		Get("https://www.strava.com/api/v3/clubs/470714/group_events")
 
-	if err != nil {
+	if (err != nil) || (resp.StatusCode() != 200) {
 		log.Fatalln("Failed to retrieve Strava events")
 	}
 
