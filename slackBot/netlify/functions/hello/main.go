@@ -1,19 +1,30 @@
 package main
 
 import (
-	"github.com/aws/aws-lambda-go/events"
-	"github.com/aws/aws-lambda-go/lambda"
-	"github.com/davecgh/go-spew/spew"
+	"encoding/json"
+	"github.com/akrylysov/algnhsa"
+	"net/http"
 )
 
-func handler(request events.APIGatewayProxyRequest) (*events.APIGatewayProxyResponse, error) {
-	spew.Dump(request)
-	return &events.APIGatewayProxyResponse{
-		StatusCode: 200,
-		Body:       "Hello, World!",
-	}, nil
+func helloWorldHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		w.Header().Set("Content-Type", "application/json")
+
+		response := map[string]string{"message": "Hello, World"}
+		json.NewEncoder(w).Encode(response)
+	} else {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func getHttpServer() *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", helloWorldHandler)
+
+	return mux
 }
 
 func main() {
-	lambda.Start(handler)
+	mux := getHttpServer()
+	algnhsa.ListenAndServe(mux, nil)
 }
