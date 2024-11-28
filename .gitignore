@@ -1,1 +1,4 @@
 .idea
+scripts
+# Local Netlify folder
+.netlify
