@@ -17,14 +17,8 @@ func helloWorldHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func getHttpServer() *http.ServeMux {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", helloWorldHandler)
-
-	return mux
-}
-
 func main() {
-	mux := getHttpServer()
-	algnhsa.ListenAndServe(mux, nil)
+	http.HandleFunc("/", helloWorldHandler)
+	//http.ListenAndServe(":8000", nil)
+	algnhsa.ListenAndServe(http.DefaultServeMux, nil)
 }
