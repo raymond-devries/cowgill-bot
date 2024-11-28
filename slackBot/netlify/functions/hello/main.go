@@ -2,8 +2,10 @@ package main
 
 import (
 	"encoding/json"
-	"github.com/akrylysov/algnhsa"
 	"net/http"
+
+	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/awslabs/aws-lambda-go-api-proxy/httpadapter"
 )
 
 func helloWorldHandler(w http.ResponseWriter, r *http.Request) {
@@ -19,6 +21,5 @@ func helloWorldHandler(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	http.HandleFunc("/", helloWorldHandler)
-	//http.ListenAndServe(":8000", nil)
-	algnhsa.ListenAndServe(http.DefaultServeMux, nil)
+	lambda.Start(httpadapter.New(http.DefaultServeMux).ProxyWithContext)
 }
