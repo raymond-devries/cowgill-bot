@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
 	"io"
@@ -45,13 +46,20 @@ func eventsHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.Header().Set("Content-Type", "text")
-		w.Write([]byte(r.Challenge))
+		_, err = w.Write([]byte(r.Challenge))
+		if err != nil {
+			fmt.Println(err)
+		}
+		return
 	}
 	if eventsAPIEvent.Type == slackevents.CallbackEvent {
 		innerEvent := eventsAPIEvent.InnerEvent
 		switch ev := innerEvent.Data.(type) {
 		case *slackevents.AppMentionEvent:
-			client.PostMessage(ev.Channel, slack.MsgOptionText("🐮", false))
+			_, _, err = client.PostMessage(ev.Channel, slack.MsgOptionText("🐮", false))
+			if err != nil {
+				fmt.Println(err)
+			}
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -62,10 +70,10 @@ func setRoutes() {
 	http.HandleFunc("/", eventsHandler)
 }
 
-//func main() {
-//	setRoutes()
-//	err := http.ListenAndServe(":8000", nil)
-//	if err != nil {
-//		fmt.Println(err)
-//	}
-//}
+func main() {
+	setRoutes()
+	err := http.ListenAndServe(":8000", nil)
+	if err != nil {
+		fmt.Println(err)
+	}
+}
