@@ -70,10 +70,10 @@ func setRoutes() {
 	http.HandleFunc("/", eventsHandler)
 }
 
-func main() {
-	setRoutes()
-	err := http.ListenAndServe(":8000", nil)
-	if err != nil {
-		fmt.Println(err)
-	}
-}
+//func main() {
+//	setRoutes()
+//	err := http.ListenAndServe(":8000", nil)
+//	if err != nil {
+//		fmt.Println(err)
+//	}
+//}
