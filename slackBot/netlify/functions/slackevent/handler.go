@@ -52,6 +52,8 @@ func eventsHandler(w http.ResponseWriter, r *http.Request) {
 		switch ev := innerEvent.Data.(type) {
 		case *slackevents.AppMentionEvent:
 			client.PostMessage(ev.Channel, slack.MsgOptionText("🐮", false))
+			w.WriteHeader(http.StatusOK)
+			return
 		}
 	}
 }
