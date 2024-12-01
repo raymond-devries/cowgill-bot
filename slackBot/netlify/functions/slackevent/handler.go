@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
 	"io"
@@ -61,10 +60,10 @@ func setRoutes() {
 	http.HandleFunc("/", eventsHandler)
 }
 
-func main() {
-	setRoutes()
-	err := http.ListenAndServe(":8000", nil)
-	if err != nil {
-		fmt.Println(err)
-	}
-}
+//func main() {
+//	setRoutes()
+//	err := http.ListenAndServe(":8000", nil)
+//	if err != nil {
+//		fmt.Println(err)
+//	}
+//}
